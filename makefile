@@ -17,6 +17,7 @@
 #	ifort /O3 /fp:precise /fpscomp:ioformat /fpscomp:logicals  /debug:full /traceback /Qsave /Qzero /gen-interfaces /warn:interfaces /check /fpe0 1DSolver.f90 -Qmkl -link -libpath:c:/FEAST/lib/x64 libfeast_sparse.a
 
 1DSolver.exe:	1DSolver.f90 
-	ifort 1DSolver.f90 -Qmkl -traceback -debug:full -check:bounds -gen-interfaces 
+	ifort 1DSolver.f90 -Qmkl
+#	-traceback -debug:full -check:bounds -gen-interfaces 
 clean:
 	del *.x *.exe *.out *.obj *.un~ *.o *__genmod.mod *__genmod.f90 *.pdb

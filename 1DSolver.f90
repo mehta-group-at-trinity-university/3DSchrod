@@ -232,7 +232,7 @@ implicit none
 
         
         !set up solver and call solver
-        m0=50
+        m0=100
         allocate(EigenVals(m0),EigenVecs(fsMAx,m0),res(m0),feastparam(64))
         call feastinit(feastparam)
         feastparam(1)=1
