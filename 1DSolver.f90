@@ -2,7 +2,7 @@
 !Uses sparce matricies for T and V
 !Outputs can be eigenvalues  
 program Solver
-use mkl_spblas
+!use mkl_spblas
 implicit none
         real*8, allocatable :: nodesX(:), weightsX(:), nodesY(:), weightsY(:), nodesZ(:), &
                 weightsZ(:),holder(:),EigenVals(:),Vsparse(:), res(:), Hsparse(:)
@@ -12,32 +12,33 @@ implicit none
                 dfGLX(:,:),dfGLY(:,:),dfGLZ(:,:),dfGLXt(:,:),dfGLYt(:,:),dfGLZt(:,:)
         real*8, allocatable :: indexOf(:,:,:)
         real*8 :: n,w,valX,valXp,a,b,epsout,temp
-        integer :: x,i,j,k,ip,jp,kp,m,sX,sY,sZ,sMax,numN0,ijk,ijkp,sXc,sYc,sZc,info,loop,rCount,row,m0
-        integer, allocatable :: feastparam(:), Hrow(:), Hcol(:), Vrow(:), Vcol(:)
-        real*4 :: Tstart, Tend
+        integer :: feastparam(64),x,i,j,k,ip,jp,kp,m,sX,sY,sZ,sMax,numN0,ijk,ijkp,sXc,sYc,sZc,info,loop,rCount,row,m0
+        integer, allocatable :: Hrow(:), Hcol(:), Vrow(:), Vcol(:)
+        integer :: Tstart, Tend, rate
         integer :: fsx,fsy,fsz,fsMax
  
         open(unit=1,file="nodesAndWeights10.dat")
         open(unit=2,file="nodesAndWeights20.dat")
         open(unit=3,file="nodesAndWeights30.dat")
         open(unit=4,file="nodesAndWeights40.dat")
-        open(unit=5,file="nodesAndWeights50.dat")
-        open(unit=6,file="nodesAndWeights60.dat")
-        open(unit=7,file="nodesAndWeights70.dat")
-        open(unit=8,file="nodesAndWeights80.dat")
-        open(unit=9,file="nodesAndWeights90.dat")
-        open(unit=10,file="nodesAndWeights100.dat")
+        !open(unit=5,file="nodesAndWeights50.dat")
+        !open(unit=6,file="nodesAndWeights60.dat")
+        !open(unit=7,file="nodesAndWeights70.dat")
+        !open(unit=8,file="nodesAndWeights80.dat")
+        !open(unit=9,file="nodesAndWeights90.dat")
+        !open(unit=10,file="nodesAndWeights100.dat")
         
-        open(unit=100,file="dataOut.dat")
+        !open(unit=100,file="dataOut.dat")
 
-        write(*,*) "enter rescale range"
-        read(*,*) a,b 
-
-        !do x=1,1
-        x=2
+        !write(*,*) "enter rescale range"
+        !read(*,*) a,b 
+        a=-5d0
+        b=5d0
+        !do x=1,1p
+        x=3
 
         print *, "starting set",x
-        call cpu_time(Tstart)
+        call system_clock(Tstart)
 
         read(x,*) sX
         sY=sX
@@ -232,8 +233,8 @@ implicit none
 
         
         !set up solver and call solver
-        m0=100
-        allocate(EigenVals(m0),EigenVecs(fsMAx,m0),res(m0),feastparam(64))
+        m0=1
+        allocate(EigenVals(m0),EigenVecs(fsMAx,m0),res(m0))
         call feastinit(feastparam)
         feastparam(1)=1
         feastparam(2)=20
@@ -242,14 +243,14 @@ implicit none
         call dfeast_scsrev('F',fsMax,Hsparse,Hrow,Hcol,feastparam,epsout,loop,0d0,10d0,m0,EigenVals,EigenVecs,m,res,info)
         
         print *, "info: ",info
-        call cpu_time(Tend)
+        call system_clock(Tend,rate)
         print *, "finished set",x
-        print *, "Time elapsed:",Tend-Tstart
+        print *, "Time elapsed:",(Tend-Tstart)/rate
         
         print *, EigenVals(1)
         print *, EigenVals(2)
         print *, EigenVals(3)
-        write (100,*) sX,(EigenVals(1)-1.5d0)/1.5d0,Tend-Tstart
+        !write (100,*) sX,(EigenVals(1)-1.5d0)/1.5d0,Tend-Tstart
 !        deallocate(EigenVals,EigenVecs,res,feastparam,Hsparse,Hcol,Hrow, &
  !               nodesX,weightsX,nodesY,weightsY,nodesZ,weightsZ,holder, &
   !              Xx,dXx,Xy,dXy,Xz,dXz,weightsDMX,weightsDMY,weightsDMZ, &
@@ -262,13 +263,13 @@ implicit none
         close(2)
         close(3)
         close(4)
-        close(5)
-        close(6)
-        close(7)
-        close(8)
-        close(9)
-        close(10)
-        close(100)
+        !close(5)
+        !close(6)
+        !close(7)
+        !close(8)
+        !close(9)
+        !close(10)
+        !close(100)
 end program Solver
 
 
@@ -345,7 +346,7 @@ implicit none
         real*8 chi(sz,sz+2),f(fs,sz+2)
         do i=1,fs
                do j=1,sz+2
-                        f(i,j)=(1d0/sqrt(2d0))*(chi(i,j)-chi(sz+1-i,j))
+                        f(i,j)=(1d0/sqrt(2d0))*(chi(i,j)+chi(sz+1-i,j))
                 end do
         end do
 end subroutine
