@@ -8,12 +8,14 @@ implicit none
                 weightsZ(:),holder(:),EigenVals(:),Vsparse(:), res(:), Hsparse(:)
         real*8, allocatable :: Xx(:,:),dXx(:,:),Xy(:,:),dXy(:,:),Xz(:,:),dXz(:,:), &
                 weightsDMX(:,:),weightsDMY(:,:),weightsDMZ(:,:),Hmat(:,:),EigenVecs(:,:), &
-                TmatX(:,:),TmatY(:,:),TmatZ(:,:),dXxtrim(:,:), dXytrim(:,:), dXztrim(:,:)
+                TmatX(:,:),TmatY(:,:),TmatZ(:,:),dXxtrim(:,:), dXytrim(:,:), dXztrim(:,:), &
+                dfGLX(:,:),dfGLY(:,:),dfGLZ(:,:),dfGLXt(:,:),dfGLYt(:,:),dfGLZt(:,:)
         real*8, allocatable :: indexOf(:,:,:)
         real*8 :: n,w,valX,valXp,a,b,epsout,temp
         integer :: x,i,j,k,ip,jp,kp,m,sX,sY,sZ,sMax,numN0,ijk,ijkp,sXc,sYc,sZc,info,loop,rCount,row,m0
         integer, allocatable :: feastparam(:), Hrow(:), Hcol(:), Vrow(:), Vcol(:)
         real*4 :: Tstart, Tend
+        integer :: fsx,fsy,fsz,fsMax
  
         open(unit=1,file="nodesAndWeights10.dat")
         open(unit=2,file="nodesAndWeights20.dat")
@@ -32,7 +34,7 @@ implicit none
         read(*,*) a,b 
 
         !do x=1,1
-        x=1
+        x=2
 
         print *, "starting set",x
         call cpu_time(Tstart)
@@ -45,11 +47,16 @@ implicit none
         sZc=sZ-2
         sMax=sXc*sYc*sZc
 
+        fsx=sx/2-1
+        fsy=sy/2-1
+        fsz=sz/2-1
+        fsMax=fsx*fsy*fsz
+
         allocate(nodesX(sX),weightsX(sX),nodesY(sY),weightsY(sY),nodesZ(sZ),weightsZ(sZ),holder(sX), &
                 Xx(sX,sX),dXx(sX,sX),Xy(sY,sY),dXy(sY,sY),Xz(sZ,sZ),dXz(sZ,sZ), &
-                weightsDMX(sX,sX),weightsDMY(sY,sY),weightsDMZ(sZ,sZ), &
-                indexOf(sX-1,sY-1,sZ-1),Vsparse(sMax),Vrow(sMax),Vcol(sMax),Hmat(sMax,sMax), &
-                TmatX(sXc,sXc), TmatY(sYc,sYc),TmatZ(sZc,sZc),dXxtrim(sXc,sX),dXytrim(sYc,sY),dXztrim(sZc,sZ))
+                weightsDMX(sX/2,sX/2),weightsDMY(sY/2,sY/2),weightsDMZ(sZ/2,sZ/2),indexOf(fsx,fsy,fsz), &
+                TmatX(fsx,fsx), TmatY(fsy,fsy),TmatZ(fsz,fsz),dXxtrim(sXc,sX),dXytrim(sYc,sY),dXztrim(sZc,sZ), &
+                dfGLX(fsx,sx),dFGLY(fsy,sy),dfGLZ(fsz,sz),dfGLXt(fsx,sx/2),dfGLYt(fsy,sy/2),dfGLZt(fsz,sz/2))
 
         !read in data for each basis
         do i=1,sX
@@ -104,12 +111,22 @@ implicit none
         dXytrim = dXy(2:sY-1,1:sY)
         dXztrim = dXz(2:sZ-1,1:sZ)
 
+        print *, size(dxxtrim)
+
+        !call xTOf(sXc,fsx,XGLXtrim,fGLX)
+        call xTOf(sXc,fsx,dXXtrim,dfGLX)
+        call xTOf(sYc,fsy,dXYtrim,dfGLY)
+        call xTOf(sZc,fsz,dXZtrim,dfGLZ)
+        
+        dfGLXt = dfGLX(1:fsx,1:sX/2)
+        dfGLYt = dfGLY(1:fsy,1:sY/2)
+        dfGLZt = dfGLZ(1:fsz,1:sZ/2)
 
         !make index array to help build Tsparse matrix
         row = 0
-        do i=1,sXc
-                do j=1,sYc
-                        do k=1,sZc
+        do i=1,fsx
+                do j=1,fsy
+                        do k=1,fsz
                                 row=row+1
                                 indexOf(i,j,k)=row
                         end do
@@ -118,28 +135,28 @@ implicit none
 
         !make T kenetic evergy matrix for each dimenstion
         !first make diagonal weight matrices
-        do i=1,sX
-                do ip=1,sX
+        do i=1,sX/2
+                do ip=1,sX/2
                         if (i == ip) then
-                                weightsDMX(i,ip)=weightsX(i)
+                                weightsDMX(i,ip)=2d0*weightsX(i)
                         else
                                 weightsDMX(i,ip) = 0
                         end if
                 end do
         end do
-        do i=1,sY
-                do ip=1,sY
+        do i=1,sY/2
+                do ip=1,sY/2
                         if (i == ip) then
-                                weightsDMY(i,ip)=weightsY(i)
+                                weightsDMY(i,ip)=2d0*weightsY(i)
                         else
                                 weightsDMY(i,ip) = 0
                         end if
                 end do
         end do
-        do i=1,sZ
-                do ip=1,sZ
+        do i=1,sZ/2
+                do ip=1,sZ/2
                         if (i == ip) then
-                                weightsDMZ(i,ip)=weightsZ(i)
+                                weightsDMZ(i,ip)=2d0*weightsZ(i)
                         else
                                 weightsDMZ(i,ip) = 0
                         end if
@@ -147,9 +164,9 @@ implicit none
         end do
         !now make the Tmat for each dimention 
         !- this formula comes from integration by parts, and the surface term goes to zero
-        TmatX = (0.5d0)*MATMUL(dXytrim,MATMUL(weightsDMX,TRANSPOSE(dXxtrim)))
-        TmatY = (0.5d0)*MATMUL(dXytrim,MATMUL(weightsDMY,TRANSPOSE(dXytrim)))
-        TmatZ = (0.5d0)*MATMUL(dXztrim,MATMUL(weightsDMZ,TRANSPOSE(dXztrim)))
+        TmatX = (0.5d0)*MATMUL(dfGLXt,MATMUL(weightsDMX,TRANSPOSE(dfGLXt)))
+        TmatY = (0.5d0)*MATMUL(dfGLYt,MATMUL(weightsDMY,TRANSPOSE(dfGLYt)))
+        TmatZ = (0.5d0)*MATMUL(dfGLZt,MATMUL(weightsDMZ,TRANSPOSE(dfGLZt)))
         
         !now combine them using delta properties, and construct the Hsparse matrices explicitly, 
         !skipping creating T or V matrices
@@ -158,13 +175,13 @@ implicit none
         row=0
         rCount=1
         do m=1,2
-                do i=1,sXc
-                        do j=1,sYc
-                                do k=1,sZc
+                do i=1,fsx
+                        do j=1,fsy
+                                do k=1,fsz
                                         row=row+1
-                                        do ip=1,sXc
-                                                do jp=1,sYc
-                                                        do kp=1,sZc
+                                        do ip=1,fsx
+                                                do jp=1,fsy
+                                                        do kp=1,fsz
                                                                 ijk=indexOf(i,j,k)
                                                                 ijkp=indexOf(ip,jp,kp)
                                                                 temp = 0d0
@@ -178,7 +195,7 @@ implicit none
                                                                         temp=temp+TmatZ(k,kp)
                                                                 end if
                                                                 if((i==ip).and.(j==jp).and.(k==kp)) then
-                                                                        Call V3d(nodesX(i),nodesY(j),nodesZ(k),valX)
+                                                                        Call V3d(nodesX(i+1),nodesY(j+1),nodesZ(k+1),valX)
                                                                         temp=temp+valX
                                                                 end if
                                                                 if(temp /= 0) then
@@ -197,7 +214,7 @@ implicit none
                         end do
                 end do
                 if(m==1) then
-                        allocate(Hsparse(1:numN0),Hcol(1:numN0),Hrow(1:sMax+2))
+                        allocate(Hsparse(1:numN0),Hcol(1:numN0),Hrow(1:fsMax+2))
                         Hrow=0
                         Hrow(1)=1
                         numN0=0
@@ -206,30 +223,32 @@ implicit none
                 end if
         end do
         !sum up row counts for Hrow
-        do i=2,sMax+1
+        do i=2,fsMax+1
                 Hrow(i)=Hrow(i)+Hrow(i-1)
         end do
 
         !print *, "Got H"
-        !print *, "If",size(Hsparse)," =",Hrow(sMax+1)-1," =",size(Hcol)," then good"
+        print *, "If",size(Hsparse)," =",Hrow(fsMax+1)-1," =",size(Hcol)," then good"
 
         
         !set up solver and call solver
-        m0=500
-        allocate(EigenVals(m0),EigenVecs(sMAx,m0),res(m0),feastparam(64))
+        m0=50
+        allocate(EigenVals(m0),EigenVecs(fsMAx,m0),res(m0),feastparam(64))
         call feastinit(feastparam)
         feastparam(1)=1
         feastparam(2)=20
         !feastparam(4)=3
         feastparam(17)=0
-        call dfeast_scsrev('F',sMax,Hsparse,Hrow,Hcol,feastparam,epsout,loop,0d0,10d0,m0,EigenVals,EigenVecs,m,res,info)
+        call dfeast_scsrev('F',fsMax,Hsparse,Hrow,Hcol,feastparam,epsout,loop,0d0,10d0,m0,EigenVals,EigenVecs,m,res,info)
         
-        !print *, "info: ",info
+        print *, "info: ",info
         call cpu_time(Tend)
         print *, "finished set",x
         print *, "Time elapsed:",Tend-Tstart
         
         print *, EigenVals(1)
+        print *, EigenVals(2)
+        print *, EigenVals(3)
         write (100,*) sX,(EigenVals(1)-1.5d0)/1.5d0,Tend-Tstart
 !        deallocate(EigenVals,EigenVecs,res,feastparam,Hsparse,Hcol,Hrow, &
  !               nodesX,weightsX,nodesY,weightsY,nodesZ,weightsZ,holder, &
@@ -320,6 +339,16 @@ implicit none
         Xsum=Xsum*(weights(i)**(-.5d0))
 end subroutine DifferentiateChi
 
+subroutine xTOf(sz,fs,chi,f)
+implicit none
+        integer :: i,j,sz,fs
+        real*8 chi(sz,sz+2),f(fs,sz+2)
+        do i=1,fs
+               do j=1,sz+2
+                        f(i,j)=(1d0/sqrt(2d0))*(chi(i,j)-chi(sz+1-i,j))
+                end do
+        end do
+end subroutine
 
 subroutine VPotHO(x,res)
 implicit none
