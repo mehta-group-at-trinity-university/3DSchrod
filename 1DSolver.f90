@@ -11,11 +11,12 @@ implicit none
                 TmatX(:,:),TmatY(:,:),TmatZ(:,:),dXxtrim(:,:), dXytrim(:,:), dXztrim(:,:), &
                 dfGLX(:,:),dfGLY(:,:),dfGLZ(:,:),dfGLXt(:,:),dfGLYt(:,:),dfGLZt(:,:)
         real*8, allocatable :: indexOf(:,:,:)
-        real*8 :: n,w,valX,valXp,a,b,epsout,temp
+        real*8 :: n,w,valX,valXp,a,b,epsout,temp,mup,mdn,r0,d
         integer :: feastparam(64),x,i,j,k,ip,jp,kp,m,sX,sY,sZ,sMax,numN0,ijk,ijkp,sXc,sYc,sZc,info,loop,rCount,row,m0
         integer, allocatable :: Hrow(:), Hcol(:), Vrow(:), Vcol(:)
         integer :: Tstart, Tend, rate
         integer :: fsx,fsy,fsz,fsMax
+        real*8, external :: x12,x13,x14,x23,x24,x34
  
         open(unit=1,file="nodesAndWeights10.dat")
         open(unit=2,file="nodesAndWeights20.dat")
@@ -32,8 +33,8 @@ implicit none
 
         !write(*,*) "enter rescale range"
         !read(*,*) a,b 
-        a=-5d0
-        b=5d0
+        !a=-5d0
+        !b=5d0
         !do x=1,1p
         x=3
 
@@ -53,6 +54,11 @@ implicit none
         fsz=sz/2-1
         fsMax=fsx*fsy*fsz
 
+        mup=1d0
+        mdn=1d0
+        r0=1d0
+        d=50
+
         allocate(nodesX(sX),weightsX(sX),nodesY(sY),weightsY(sY),nodesZ(sZ),weightsZ(sZ),holder(sX), &
                 Xx(sX,sX),dXx(sX,sX),Xy(sY,sY),dXy(sY,sY),Xz(sZ,sZ),dXz(sZ,sZ), &
                 weightsDMX(sX/2,sX/2),weightsDMY(sY/2,sY/2),weightsDMZ(sZ/2,sZ/2),indexOf(fsx,fsy,fsz), &
@@ -71,9 +77,9 @@ implicit none
         weightsZ=weightsX
         
         !rescale the basis functions to the desired range
-        call rescale(sX,a,b,nodesX)
-        call rescale(sY,a,b,nodesY)
-        call rescale(sZ,a,b,nodesZ)
+        call rescale(sX,0d0,5d0,nodesX)
+        call rescale(sY,0d0,5d0,nodesY)
+        call rescale(sZ,-5d0,5d0,nodesZ)
         !write(*,*) "rescaled"
         
         !build the DVR basis functions and their derivatives from the Gausian Lobatto nodes for each dimention
@@ -136,12 +142,13 @@ implicit none
 
         !make T kenetic evergy matrix for each dimenstion
         !first make diagonal weight matrices
+        weightsDMX=0d0
+        weightsDMY=0d0
+        weightsDMZ=0d0
         do i=1,sX/2
                 do ip=1,sX/2
                         if (i == ip) then
                                 weightsDMX(i,ip)=2d0*weightsX(i)
-                        else
-                                weightsDMX(i,ip) = 0
                         end if
                 end do
         end do
@@ -149,8 +156,6 @@ implicit none
                 do ip=1,sY/2
                         if (i == ip) then
                                 weightsDMY(i,ip)=2d0*weightsY(i)
-                        else
-                                weightsDMY(i,ip) = 0
                         end if
                 end do
         end do
@@ -158,8 +163,6 @@ implicit none
                 do ip=1,sZ/2
                         if (i == ip) then
                                 weightsDMZ(i,ip)=2d0*weightsZ(i)
-                        else
-                                weightsDMZ(i,ip) = 0
                         end if
                 end do
         end do
@@ -198,6 +201,18 @@ implicit none
                                                                 if((i==ip).and.(j==jp).and.(k==kp)) then
                                                                         Call V3d(nodesX(i+1),nodesY(j+1),nodesZ(k+1),valX)
                                                                         temp=temp+valX
+                                                                        call V2bMorse(x12(nodesX(i+1),nodesY(j+1),nodesZ(k+1),mup,mdn),r0,d,a,valX)
+                                                                        temp=temp+valX
+                                                                        call V2bMorse(x13(nodesX(i+1),nodesY(j+1),nodesZ(k+1),mup,mdn),r0,d,a,valX)
+                                                                        temp=temp+valX
+                                                                        call V2bMorse(x14(nodesX(i+1),nodesY(j+1),nodesZ(k+1),mup,mdn),r0,d,a,valX)
+                                                                        temp=temp+valX
+                                                                        call V2bMorse(x23(nodesX(i+1),nodesY(j+1),nodesZ(k+1),mup,mdn),r0,d,a,valX)
+                                                                        temp=temp+valX
+                                                                        call V2bMorse(x24(nodesX(i+1),nodesY(j+1),nodesZ(k+1),mup,mdn),r0,d,a,valX)
+                                                                        temp=temp+valX
+                                                                        call V2bMorse(x14(nodesX(i+1),nodesY(j+1),nodesZ(k+1),mup,mdn),r0,d,a,valX)
+                                                                        temp=temp+valX
                                                                 end if
                                                                 if(temp /= 0) then
                                                                         numN0=numN0+1
@@ -233,23 +248,23 @@ implicit none
 
         
         !set up solver and call solver
-        m0=1
+        m0=100
         allocate(EigenVals(m0),EigenVecs(fsMAx,m0),res(m0))
         call feastinit(feastparam)
         feastparam(1)=1
         feastparam(2)=20
         !feastparam(4)=3
         feastparam(17)=0
-        call dfeast_scsrev('F',fsMax,Hsparse,Hrow,Hcol,feastparam,epsout,loop,0d0,10d0,m0,EigenVals,EigenVecs,m,res,info)
+        call dfeast_scsrev('F',fsMax,Hsparse,Hrow,Hcol,feastparam,epsout,loop,0d0,5d0,m0,EigenVals,EigenVecs,m,res,info)
         
         print *, "info: ",info
         call system_clock(Tend,rate)
         print *, "finished set",x
         print *, "Time elapsed:",(Tend-Tstart)/rate
         
-        print *, EigenVals(1)
-        print *, EigenVals(2)
-        print *, EigenVals(3)
+        do i=1,20
+                print *, EigenVals(i)
+        end do
         !write (100,*) sX,(EigenVals(1)-1.5d0)/1.5d0,Tend-Tstart
 !        deallocate(EigenVals,EigenVecs,res,feastparam,Hsparse,Hcol,Hrow, &
  !               nodesX,weightsX,nodesY,weightsY,nodesZ,weightsZ,holder, &
@@ -346,7 +361,7 @@ implicit none
         real*8 chi(sz,sz+2),f(fs,sz+2)
         do i=1,fs
                do j=1,sz+2
-                        f(i,j)=(1d0/sqrt(2d0))*(chi(i,j)+chi(sz+1-i,j))
+                        f(i,j)=(1d0/sqrt(2d0))*(chi(i,j)-chi(sz+1-i,j))
                 end do
         end do
 end subroutine
@@ -371,3 +386,72 @@ implicit none
         
         res = (0.5d0)*(x**2+y**2+z**2)
 end subroutine V3D
+
+
+function x12(x,y,z,mup,mdn) result(res)
+implicit none
+        real*8 x,y,z,mup,mdn,res
+        res=(2**0.3333333333333333*mdn**0.8333333333333334*mup*x)/&
+                (Sqrt((mdn*mup)/(mdn + mup))*(mup*(mdn + mup))**0.6666666666666666)
+end function x12
+
+function x13(x,y,z,mup,mdn) result(res)
+implicit none
+        real*8 x,y,z,mup,mdn,res
+        res = (mup**1.6666666666666667*(mdn**7*(mdn + mup))**0.16666666666666666*x + &
+                mup**0.6666666666666666*(mdn**13*(mdn + mup))**0.16666666666666666*x - &
+                mdn**1.6666666666666667*(mup**7*(mdn + mup))**0.16666666666666666*y - &
+                mdn**0.6666666666666666*(mup**13*(mdn + mup))**0.16666666666666666*y + &
+                mdn*(mdn*mup*(mdn + mup))**0.6666666666666666*z + mup*(mdn*mup*(mdn + &
+                mup))**0.6666666666666666*z)/(2**0.6666666666666666*(mdn*mup)**0.8333333333333334*(mdn + &
+                mup)**1.3333333333333333)
+end function x13
+
+function x14(x,y,z,mup,mdn) result(res)
+implicit none
+        real*8 x,y,z,mup,mdn,res
+        res = (mup**1.6666666666666667*(mdn**7*(mdn + mup))**0.16666666666666666*x + &
+                mup**0.6666666666666666*(mdn**13*(mdn + mup))**0.16666666666666666*x + &
+                mdn**1.6666666666666667*(mup**7*(mdn + mup))**0.16666666666666666*y + &
+                mdn**0.6666666666666666*(mup**13*(mdn + mup))**0.16666666666666666*y + &
+                mdn*(mdn*mup*(mdn + mup))**0.6666666666666666*z + &
+                mup*(mdn*mup*(mdn + mup))**0.6666666666666666*z)/&
+                (2**0.6666666666666666*(mdn*mup)**0.8333333333333334*(mdn + mup)**1.3333333333333333)
+end function x14
+
+function x23(x,y,z,mup,mdn) result(res)
+implicit none
+        real*8 x,y,z,mup,mdn,res
+        res = -((mup**1.6666666666666667*(mdn**7*(mdn + mup))**0.16666666666666666*x + &
+                mup**0.6666666666666666*(mdn**13*(mdn + mup))**0.16666666666666666*x + &
+                mdn**1.6666666666666667*(mup**7*(mdn + mup))**0.16666666666666666*y + &
+                mdn**0.6666666666666666*(mup**13*(mdn + mup))**0.16666666666666666*y - &
+                mdn*(mdn*mup*(mdn + mup))**0.6666666666666666*z - &
+                mup*(mdn*mup*(mdn + mup))**0.6666666666666666*z)/&
+                (2**0.6666666666666666*(mdn*mup)**0.8333333333333334*(mdn + mup)**1.3333333333333333))
+end function x23
+
+function x24(x,y,z,mup,mdn) result(res)
+implicit none
+        real*8 x,y,z,mup,mdn,res
+        res = (-(mup**1.6666666666666667*(mdn**7*(mdn + mup))**0.16666666666666666*x) - &
+                mup**0.6666666666666666*(mdn**13*(mdn + mup))**0.16666666666666666*x + &
+                mdn**1.6666666666666667*(mup**7*(mdn + mup))**0.16666666666666666*y + &
+                mdn**0.6666666666666666*(mup**13*(mdn + mup))**0.16666666666666666*y + &
+                mdn*(mdn*mup*(mdn + mup))**0.6666666666666666*z + &
+                mup*(mdn*mup*(mdn + mup))**0.6666666666666666*z)/&
+                (2**0.6666666666666666*(mdn*mup)**0.8333333333333334*(mdn + mup)**1.3333333333333333)
+end function x24
+           
+function x34(x,y,z,mup,mdn) result(res)
+implicit none
+        real*8 x,y,z,mup,mdn,res
+        res = (2**0.3333333333333333*mup**0.3333333333333333*y)/(mdn*(mdn + mup))**0.16666666666666666
+end function x34
+
+subroutine v2bMorse(r,r0,d,a,res)
+implicit none
+        real*8 x,res,r,r0,d,a
+        res=d*(1d0-exp(-a*(r-r0)))**2d0-d
+end subroutine v2bMorse
+
