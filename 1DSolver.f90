@@ -15,7 +15,7 @@ implicit none
         integer :: feastparam(64),x,i,j,k,ip,jp,kp,m,sX,sY,sZ,sMax,numN0,ijk,ijkp,sXc,sYc,sZc,info,loop,rCount,row,m0
         integer, allocatable :: Hrow(:), Hcol(:), Vrow(:), Vcol(:)
         integer :: Tstart, Tend, rate
-        integer :: fsx,fsy,fsz,fsMax
+        integer :: fsx,fsy,fsz,fsMax,fxmax
         real*8, external :: x12,x13,x14,x23,x24,x34
  
         open(unit=1,file="nodesAndWeights10.dat")
@@ -36,7 +36,7 @@ implicit none
         !a=-5d0
         !b=5d0
         !do x=1,1p
-        x=3
+        x=2
 
         print *, "starting set",x
         call system_clock(Tstart)
@@ -54,15 +54,17 @@ implicit none
         fsz=sz/2-1
         fsMax=fsx*fsy*fsz
 
+        fxMax=sXc*sYc*sZc
+
         mup=1d0
         mdn=1d0
         r0=1d0
-        d=50
+        d=2d0
 
         allocate(nodesX(sX),weightsX(sX),nodesY(sY),weightsY(sY),nodesZ(sZ),weightsZ(sZ),holder(sX), &
                 Xx(sX,sX),dXx(sX,sX),Xy(sY,sY),dXy(sY,sY),Xz(sZ,sZ),dXz(sZ,sZ), &
-                weightsDMX(sX/2,sX/2),weightsDMY(sY/2,sY/2),weightsDMZ(sZ/2,sZ/2),indexOf(fsx,fsy,fsz), &
-                TmatX(fsx,fsx), TmatY(fsy,fsy),TmatZ(fsz,fsz),dXxtrim(sXc,sX),dXytrim(sYc,sY),dXztrim(sZc,sZ), &
+                weightsDMX(sX,sX),weightsDMY(sY,sY),weightsDMZ(sZ/2,sZ/2),indexOf(sXc,sYc,fsz), &
+                TmatX(sXc,sXc), TmatY(sYc,sYc),TmatZ(fsz,fsz),dXxtrim(sXc,sX),dXytrim(sYc,sY),dXztrim(sZc,sZ), &
                 dfGLX(fsx,sx),dFGLY(fsy,sy),dfGLZ(fsz,sz),dfGLXt(fsx,sx/2),dfGLYt(fsy,sy/2),dfGLZt(fsz,sz/2))
 
         !read in data for each basis
@@ -121,18 +123,18 @@ implicit none
         print *, size(dxxtrim)
 
         !call xTOf(sXc,fsx,XGLXtrim,fGLX)
-        call xTOf(sXc,fsx,dXXtrim,dfGLX)
-        call xTOf(sYc,fsy,dXYtrim,dfGLY)
+        !call xTOf(sXc,fsx,dXXtrim,dfGLX)
+        !call xTOf(sYc,fsy,dXYtrim,dfGLY)
         call xTOf(sZc,fsz,dXZtrim,dfGLZ)
         
-        dfGLXt = dfGLX(1:fsx,1:sX/2)
-        dfGLYt = dfGLY(1:fsy,1:sY/2)
+        !dfGLXt = dfGLX(1:fsx,1:sX/2)
+        !dfGLYt = dfGLY(1:fsy,1:sY/2)
         dfGLZt = dfGLZ(1:fsz,1:sZ/2)
 
         !make index array to help build Tsparse matrix
         row = 0
-        do i=1,fsx
-                do j=1,fsy
+        do i=1,sXc
+                do j=1,sYc
                         do k=1,fsz
                                 row=row+1
                                 indexOf(i,j,k)=row
@@ -145,17 +147,17 @@ implicit none
         weightsDMX=0d0
         weightsDMY=0d0
         weightsDMZ=0d0
-        do i=1,sX/2
-                do ip=1,sX/2
+        do i=1,sX
+                do ip=1,sX
                         if (i == ip) then
-                                weightsDMX(i,ip)=2d0*weightsX(i)
+                                weightsDMX(i,ip)=weightsX(i)
                         end if
                 end do
         end do
-        do i=1,sY/2
-                do ip=1,sY/2
+        do i=1,sY
+                do ip=1,sY
                         if (i == ip) then
-                                weightsDMY(i,ip)=2d0*weightsY(i)
+                                weightsDMY(i,ip)=weightsY(i)
                         end if
                 end do
         end do
@@ -168,8 +170,8 @@ implicit none
         end do
         !now make the Tmat for each dimention 
         !- this formula comes from integration by parts, and the surface term goes to zero
-        TmatX = (0.5d0)*MATMUL(dfGLXt,MATMUL(weightsDMX,TRANSPOSE(dfGLXt)))
-        TmatY = (0.5d0)*MATMUL(dfGLYt,MATMUL(weightsDMY,TRANSPOSE(dfGLYt)))
+        TmatX = (0.5d0)*MATMUL(dXxtrim,MATMUL(weightsDMX,TRANSPOSE(dXXtrim)))
+        TmatY = (0.5d0)*MATMUL(dXytrim,MATMUL(weightsDMY,TRANSPOSE(dXYtrim)))
         TmatZ = (0.5d0)*MATMUL(dfGLZt,MATMUL(weightsDMZ,TRANSPOSE(dfGLZt)))
         
         !now combine them using delta properties, and construct the Hsparse matrices explicitly, 
@@ -179,12 +181,12 @@ implicit none
         row=0
         rCount=1
         do m=1,2
-                do i=1,fsx
-                        do j=1,fsy
+                do i=1,sXc
+                        do j=1,sYc
                                 do k=1,fsz
                                         row=row+1
-                                        do ip=1,fsx
-                                                do jp=1,fsy
+                                        do ip=1,sXc
+                                                do jp=1,sYc
                                                         do kp=1,fsz
                                                                 ijk=indexOf(i,j,k)
                                                                 ijkp=indexOf(ip,jp,kp)
@@ -230,7 +232,7 @@ implicit none
                         end do
                 end do
                 if(m==1) then
-                        allocate(Hsparse(1:numN0),Hcol(1:numN0),Hrow(1:fsMax+2))
+                        allocate(Hsparse(1:numN0),Hcol(1:numN0),Hrow(1:fxMax+2))
                         Hrow=0
                         Hrow(1)=1
                         numN0=0
@@ -239,30 +241,30 @@ implicit none
                 end if
         end do
         !sum up row counts for Hrow
-        do i=2,fsMax+1
+        do i=2,fxMax+1
                 Hrow(i)=Hrow(i)+Hrow(i-1)
         end do
 
         !print *, "Got H"
-        print *, "If",size(Hsparse)," =",Hrow(fsMax+1)-1," =",size(Hcol)," then good"
+        print *, "If",size(Hsparse)," =",Hrow(fxMax+1)-1," =",size(Hcol)," then good"
 
         
         !set up solver and call solver
-        m0=100
-        allocate(EigenVals(m0),EigenVecs(fsMAx,m0),res(m0))
+        m0=500
+        allocate(EigenVals(m0),EigenVecs(fxMax,m0),res(m0))
         call feastinit(feastparam)
         feastparam(1)=1
         feastparam(2)=20
         !feastparam(4)=3
         feastparam(17)=0
-        call dfeast_scsrev('F',fsMax,Hsparse,Hrow,Hcol,feastparam,epsout,loop,0d0,5d0,m0,EigenVals,EigenVecs,m,res,info)
+        call dfeast_scsrev('F',fxMax,Hsparse,Hrow,Hcol,feastparam,epsout,loop,0d0,10d0,m0,EigenVals,EigenVecs,m,res,info)
         
         print *, "info: ",info
         call system_clock(Tend,rate)
         print *, "finished set",x
         print *, "Time elapsed:",(Tend-Tstart)/rate
         
-        do i=1,20
+        do i=1,50
                 print *, EigenVals(i)
         end do
         !write (100,*) sX,(EigenVals(1)-1.5d0)/1.5d0,Tend-Tstart
