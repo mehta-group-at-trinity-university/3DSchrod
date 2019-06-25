@@ -11,11 +11,11 @@ implicit none
                 TmatX(:,:),TmatY(:,:),TmatZ(:,:),dXxtrim(:,:), dXytrim(:,:), dXztrim(:,:), &
                 dfGLX(:,:),dfGLY(:,:),dfGLZ(:,:),dfGLXt(:,:),dfGLYt(:,:),dfGLZt(:,:)
         real*8, allocatable :: indexOf(:,:,:)
-        real*8 :: n,w,valX,valXp,a,b,epsout,temp,mup,mdn,r0,d
-        integer :: feastparam(64),x,i,j,k,ip,jp,kp,m,sX,sY,sZ,sMax,numN0,ijk,ijkp,sXc,sYc,sZc,info,loop,rCount,row,m0
+        real*8 :: n,w,valX,valXp,a,b,epsout,temp,mup,mdn,r0,d,mu,dm
+        integer :: feastparam(64),x,i,j,k,ip,jp,kp,m,sX,sY,sZ,sMax,numN0,ijk,ijkp,sXc,sYc,sZc, &
+                info,loop,rCount,row,m0,fsx,fsy,fsz,fsmax,fxmax
         integer, allocatable :: Hrow(:), Hcol(:), Vrow(:), Vcol(:)
         integer :: Tstart, Tend, rate
-        integer :: fsx,fsy,fsz,fsMax,fxmax
         real*8, external :: x12,x13,x14,x23,x24,x34
  
         open(unit=1,file="nodesAndWeights10.dat")
@@ -49,17 +49,22 @@ implicit none
         sZc=sZ-2
         sMax=sXc*sYc*sZc
 
+
         fsx=sx/2-1
         fsy=sy/2-1
         fsz=sz/2-1
         fsMax=fsx*fsy*fsz
 
-        fxMax=sXc*sYc*sZc
-
+        fxMax=sXc*sYc*fsz
+        
+        dm=5d0
         mup=1d0
         mdn=1d0
-        r0=1d0
-        d=2d0
+        r0=0.2d0
+        d=0d0
+        a=1/r0
+        !mu=(1d0/4d0)**(-1d0/3d0)
+        !mu = 1d0
 
         allocate(nodesX(sX),weightsX(sX),nodesY(sY),weightsY(sY),nodesZ(sZ),weightsZ(sZ),holder(sX), &
                 Xx(sX,sX),dXx(sX,sX),Xy(sY,sY),dXy(sY,sY),Xz(sZ,sZ),dXz(sZ,sZ), &
@@ -79,9 +84,9 @@ implicit none
         weightsZ=weightsX
         
         !rescale the basis functions to the desired range
-        call rescale(sX,0d0,5d0,nodesX)
-        call rescale(sY,0d0,5d0,nodesY)
-        call rescale(sZ,-5d0,5d0,nodesZ)
+        call rescale(sX,0d0,dm,nodesX)
+        call rescale(sY,0d0,dm,nodesY)
+        call rescale(sZ,-dm,dm,nodesZ)
         !write(*,*) "rescaled"
         
         !build the DVR basis functions and their derivatives from the Gausian Lobatto nodes for each dimention
@@ -213,7 +218,7 @@ implicit none
                                                                         temp=temp+valX
                                                                         call V2bMorse(x24(nodesX(i+1),nodesY(j+1),nodesZ(k+1),mup,mdn),r0,d,a,valX)
                                                                         temp=temp+valX
-                                                                        call V2bMorse(x14(nodesX(i+1),nodesY(j+1),nodesZ(k+1),mup,mdn),r0,d,a,valX)
+                                                                        call V2bMorse(x34(nodesX(i+1),nodesY(j+1),nodesZ(k+1),mup,mdn),r0,d,a,valX)
                                                                         temp=temp+valX
                                                                 end if
                                                                 if(temp /= 0) then
@@ -257,22 +262,17 @@ implicit none
         feastparam(2)=20
         !feastparam(4)=3
         feastparam(17)=0
-        call dfeast_scsrev('F',fxMax,Hsparse,Hrow,Hcol,feastparam,epsout,loop,0d0,10d0,m0,EigenVals,EigenVecs,m,res,info)
+        call dfeast_scsrev('F',fxMax,Hsparse,Hrow,Hcol,feastparam,epsout,loop,-6d0*d,10d0,m0,EigenVals,EigenVecs,m,res,info)
         
         print *, "info: ",info
         call system_clock(Tend,rate)
         print *, "finished set",x
         print *, "Time elapsed:",(Tend-Tstart)/rate
         
+        print *, "a is: ",a
         do i=1,50
                 print *, EigenVals(i)
         end do
-        !write (100,*) sX,(EigenVals(1)-1.5d0)/1.5d0,Tend-Tstart
-!        deallocate(EigenVals,EigenVecs,res,feastparam,Hsparse,Hcol,Hrow, &
- !               nodesX,weightsX,nodesY,weightsY,nodesZ,weightsZ,holder, &
-  !              Xx,dXx,Xy,dXy,Xz,dXz,weightsDMX,weightsDMY,weightsDMZ, &
-   !             indexOf,Vsparse,Vrow,Vcol,Hmat,TmatX,TmatY,TmatZ, &
-    !            dXxtrim,dXytrim,dXztrim)
         
         !end do
 
@@ -363,7 +363,7 @@ implicit none
         real*8 chi(sz,sz+2),f(fs,sz+2)
         do i=1,fs
                do j=1,sz+2
-                        f(i,j)=(1d0/sqrt(2d0))*(chi(i,j)-chi(sz+1-i,j))
+                        f(i,j)=(1d0/sqrt(2d0))*(chi(i,j)+chi(sz+1-i,j))
                 end do
         end do
 end subroutine
@@ -454,6 +454,6 @@ end function x34
 subroutine v2bMorse(r,r0,d,a,res)
 implicit none
         real*8 x,res,r,r0,d,a
-        res=d*(1d0-exp(-a*(r-r0)))**2d0-d
+        res=d*(1d0-exp(-a*(abs(r)-r0)))**2d0-d
 end subroutine v2bMorse
 
